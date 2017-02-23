@@ -37,19 +37,19 @@ const parsing = file => {
 
   _.times(endpointsNb, parentIndex => {
     const [dataCenterLatency, cachesNb] = data[0].parse()
-
-    parsedData.meta.push({
-      id: parentIndex,
-      dataCenterLatency,
-      caches: [],
-    })
     data = data.slice(1)
 
     _.times(cachesNb, childIndex => {
       const [cacheIndex, endpointLatency] = data[0].parse()
 
-      parsedData.meta[parentIndex].caches.push({
-        to: cacheIndex,
+      if (_.isUndefined(parsedData.meta[parentIndex])) {
+        parsedData.meta[parentIndex] = []
+      }
+
+      parsedData.meta[parentIndex].push({
+        endpointID: parentIndex,
+        dataCenterLatency,
+        cacheID: cacheIndex,
         endpointLatency,
       })
       data = data.slice(1)
@@ -57,7 +57,7 @@ const parsing = file => {
   })
 
   data.forEach((line, index) => {
-    const [requests, videoID, endpointID] = line.parse()
+    const [videoID, endpointID, requests] = line.parse()
 
     parsedData.actions.push({ requests, videoID, endpointID })
   })
@@ -85,6 +85,31 @@ const sortByVideos = (actions, sizes) => {
   return results.sort((c, d) => c.totalRequests - d.totalRequests)
 }
 
+const sortByCache = ({ meta, actions }) => {
+  const results = []
+
+  _.flatten(meta)
+    .sort((a, b) => a.cacheID - b.cacheID)
+    .forEach(({ endpointID, dataCenterLatency, cacheID, endpointLatency }) => {
+      if (_.isUndefined(results[cacheID])) {
+        results[cacheID] = []
+      }
+      results[cacheID].push({ endpointID, endpointLatency })
+    })
+
+  results.forEach((byCache, index) => {
+    results[index] = byCache.sort((c, d) => c.endpointLatency - d.endpointLatency)
+  })
+
+  return results
+}
+
+// const outputResults = (meta, sorted) => {
+//   for (const { size, logs } of sorted) {
+//     if (size)
+//   }
+// }
+
 (() => {
   try {
     const script = __filename.split('/').slice(-1)[0]
@@ -96,6 +121,9 @@ const sortByVideos = (actions, sizes) => {
 
     const sorted = sortByVideos(parsedData.actions, parsedData.videosListSizes)
 
+    // outputResults(parsedData.meta, sorted)
+
+    console.log(util.inspect(parsedData.meta, false, null))
     console.log(util.inspect(sorted, false, null))
 
   } catch (err) {

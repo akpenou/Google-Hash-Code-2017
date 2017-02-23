@@ -24,12 +24,13 @@ String.prototype.parse = function () {
 */
 
 const parsing = file => {
-  const raw = fs.readFileSync(file, 'utf8').split('\n')
+  const raw = fs.readFileSync(file, 'utf8').split('\n').slice(0, -1)
   const [videosNb, endpointsNb, requestDesc, cachesNb, cacheSize] = raw[0].parse()
-  const videosMB = raw[1].parse()
   const parsedData = {
     meta: [],
     actions: [],
+    videosNb, endpointsNb, requestDesc, cachesNb, cacheSize,
+    videosListSizes: raw[1].parse()
   }
 
   let data = raw.slice(2)
@@ -55,12 +56,33 @@ const parsing = file => {
     })
   })
 
-  data.forEach(line => {
-    const [requests, forVideo, fromEnpoint] = line.parse()
-    parsedData.actions.push({ requests, forVideo, fromEnpoint })
+  data.forEach((line, index) => {
+    const [requests, videoID, endpointID] = line.parse()
+
+    parsedData.actions.push({ requests, videoID, endpointID })
   })
 
-  console.log(util.inspect(parsedData, false, null))
+  return parsedData
+}
+
+const sortByVideos = (actions, sizes) => {
+  const results = []
+
+  actions
+    .sort((a, b) => a.videoID - b.videoID)
+    .forEach(({ requests, videoID, endpointID }, index) => {
+      if (_.isUndefined(results[videoID])) {
+        results[videoID] = {
+          size: sizes[videoID],
+          totalRequests: 0,
+          logs: [],
+        }
+      }
+      results[videoID].logs.push({ endpointID, requests })
+      results[videoID].totalRequests += requests
+    })
+
+  return results.sort((c, d) => c.totalRequests - d.totalRequests)
 }
 
 (() => {
@@ -70,7 +92,11 @@ const parsing = file => {
 
     if (!file) throw new Error(`Usage: node ${script} file`)
 
-    parsing(file)
+    const parsedData = parsing(file)
+
+    const sorted = sortByVideos(parsedData.actions, parsedData.videosListSizes)
+
+    console.log(util.inspect(sorted, false, null))
 
   } catch (err) {
     console.error(err)
